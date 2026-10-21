@@ -1,15 +1,22 @@
 @echo off
-rmdir /s /q release
-go env -w GO111MODULE=on
-go env -w GOPROXY=https://goproxy.cn,direct
-go env -w CGO_ENABLED=1
-go env -w GOOS=windows
-go env -w GOARCH=amd64
-swag init -g cmd/apimain.go --output docs/api --instanceName api --exclude http/controller/admin
-swag init -g cmd/apimain.go --output docs/admin --instanceName admin --exclude http/controller/api
-go build -o release/apimain.exe cmd/apimain.go
-xcopy resources release\resources /E /I /Y
-xcopy docs release\docs /E /I /Y
-xcopy conf release\conf /E /I /Y
-mkdir release\runtime
-mkdir release\data
+setlocal
+cd /d "%~dp0"
+if not defined GOOS for /f %%I in ('go env GOHOSTOS') do set GOOS=%%I
+if not defined GOARCH for /f %%I in ('go env GOHOSTARCH') do set GOARCH=%%I
+if not defined CGO_ENABLED set CGO_ENABLED=1
+if not defined DOCS set DOCS=auto
+set "BUILD_GOOS=%GOOS%"
+set "BUILD_GOARCH=%GOARCH%"
+set "BUILD_CGO=%CGO_ENABLED%"
+set "GOCACHE=%CD%\artifacts\cache\go-build"
+set "GOMODCACHE=%CD%\artifacts\cache\go-mod"
+set "GOTMPDIR=%CD%\artifacts\tmp"
+set "TMPDIR=%GOTMPDIR%"
+set "TMP=%GOTMPDIR%"
+set "TEMP=%GOTMPDIR%"
+for %%D in ("%GOCACHE%" "%GOMODCACHE%" "%GOTMPDIR%") do if not exist "%%~D" mkdir "%%~D"
+for /f %%I in ('go env GOHOSTOS') do set GOOS=%%I
+for /f %%I in ('go env GOHOSTARCH') do set GOARCH=%%I
+set CGO_ENABLED=0
+go run ./scripts/build/main.go -goos "%BUILD_GOOS%" -goarch "%BUILD_GOARCH%" -cgo "%BUILD_CGO%" -docs "%DOCS%" -web-dist "%WEB_DIST%"
+exit /b %errorlevel%

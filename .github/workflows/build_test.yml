@@ -26,11 +26,11 @@ on:
       WEBCLIENT_SOURCE_LOCATION:
         description: 'Web Client API Repository'
         required: true
-        default: 'https://github.com/lejianwen/rustdesk-api-web'
+        default: 'https://github.com/Alien21/rustdesk-api-web'
 
 env:
   LATEST_TAG: latest
-  WEBCLIENT_SOURCE_LOCATION: ${{ github.event.inputs.WEBCLIENT_SOURCE_LOCATION || 'https://github.com/lejianwen/rustdesk-api-web' }}
+  WEBCLIENT_SOURCE_LOCATION: ${{ github.event.inputs.WEBCLIENT_SOURCE_LOCATION || 'https://github.com/Alien21/rustdesk-api-web' }}
   BASE_IMAGE_NAMESPACE: ${{ github.event.inputs.BASE_IMAGE_NAMESPACE || github.actor }}
   DOCKERHUB_IMAGE_NAMESPACE: ${{ github.event.inputs.DOCKERHUB_IMAGE_NAMESPACE || github.actor }}
   GHCR_IMAGE_NAMESPACE: ${{ github.event.inputs.GHCR_IMAGE_NAMESPACE || github.actor }}
@@ -54,14 +54,15 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: lejianwen/rustdesk-api-web
-          path: rustdesk-api-web
-          ref: master
+          repository: Alien21/rustdesk-api-web
+          path: artifacts/build/frontend
+          ref: develop-alien21
 
       - name: Set up Go environment
         uses: actions/setup-go@v4
         with:
           go-version: '1.23'  # 选择 Go 版本
+          cache: false
 
       - name: Set up npm
         uses: actions/setup-node@v2
@@ -69,52 +70,62 @@ jobs:
           node-version: '20'
 
       - name: build rustdesk-api-web
-        working-directory: rustdesk-api-web
+        working-directory: artifacts/build/frontend
         run: |
-          npm install
-          npm run build
-          mkdir -p ../resources/admin/
-          cp -ar dist/* ../resources/admin/
+          npm_config_cache="$GITHUB_WORKSPACE/artifacts/cache/npm" npm install
+          npm run build -- --outDir ../../publish/web
+
+      - name: Stage sources and build caches
+        run: |
+          mkdir -p artifacts/build/source artifacts/cache/go-build artifacts/cache/go-mod artifacts/cache/bin artifacts/tmp
+          tar --exclude=./artifacts --exclude=./.git -cf - . | tar -xf - -C artifacts/build/source
+          echo "GOCACHE=$GITHUB_WORKSPACE/artifacts/cache/go-build" >> "$GITHUB_ENV"
+          echo "GOMODCACHE=$GITHUB_WORKSPACE/artifacts/cache/go-mod" >> "$GITHUB_ENV"
+          echo "GOTMPDIR=$GITHUB_WORKSPACE/artifacts/tmp" >> "$GITHUB_ENV"
+          echo "TMPDIR=$GITHUB_WORKSPACE/artifacts/tmp" >> "$GITHUB_ENV"
+          echo "GOBIN=$GITHUB_WORKSPACE/artifacts/cache/bin" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/artifacts/cache/bin" >> "$GITHUB_PATH"
 
       - name: tidy
+        working-directory: artifacts/build/source
         run: go mod tidy
 
       - name: swag
+        working-directory: artifacts/build/source
         run: |
           go install github.com/swaggo/swag/cmd/swag@latest
           swag init -g cmd/apimain.go --output docs/api --instanceName api --exclude http/controller/admin
           swag init -g cmd/apimain.go --output docs/admin --instanceName admin --exclude http/controller/api
 
       - name: Build for ${{ matrix.job.goos }}-${{ matrix.job.platform }}
+        working-directory: artifacts/build/source
         run: |
-          mkdir release -p
-          cp -ar resources release/
-          cp -ar docs release/
-          cp -ar conf release/
-          mkdir -p release/data
-          mkdir -p release/runtime
+          RELEASE="$GITHUB_WORKSPACE/artifacts/build/release"
+          mkdir -p "$RELEASE"/{resources/admin,data,runtime} "$GITHUB_WORKSPACE/artifacts/publish"
+          cp -ar resources docs conf "$RELEASE/"
+          cp -ar "$GITHUB_WORKSPACE/artifacts/publish/web/." "$RELEASE/resources/admin/"
           if [ "${{ matrix.job.goos }}" = "windows" ]; then
             sudo apt-get install gcc-mingw-w64-x86-64 zip -y
-            GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=x86_64-w64-mingw32-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o ./release/apimain.exe ./cmd/apimain.go
-            echo @echo off > release/start.bat
-            echo cmd /c \"%~dp0apimain.exe\" >> release/start.bat
-            zip -r ${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}} ./release
+            GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=x86_64-w64-mingw32-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/apimain.exe" ./cmd/apimain.go
+            echo @echo off > "$RELEASE/start.bat"
+            echo cmd /c \"%~dp0apimain.exe\" >> "$RELEASE/start.bat"
+            (cd "$GITHUB_WORKSPACE/artifacts/build" && zip -r "../publish/${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}}" ./release)
           else
             if [ "${{ matrix.job.platform }}" = "arm64" ]; then
-                wget https://musl.ljw.red/aarch64-linux-musl-cross.tgz
-                tar -xf aarch64-linux-musl-cross.tgz
-                export PATH=$PATH:$PWD/aarch64-linux-musl-cross/bin
-                GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=aarch64-linux-musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o ./release/apimain ./cmd/apimain.go
+                wget -P "$GITHUB_WORKSPACE/artifacts/cache" https://musl.ljw.red/aarch64-linux-musl-cross.tgz
+                tar -xf "$GITHUB_WORKSPACE/artifacts/cache/aarch64-linux-musl-cross.tgz" -C "$GITHUB_WORKSPACE/artifacts/cache"
+                export PATH="$PATH:$GITHUB_WORKSPACE/artifacts/cache/aarch64-linux-musl-cross/bin"
+                GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=aarch64-linux-musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/apimain" ./cmd/apimain.go
             elif [ "${{ matrix.job.platform }}" = "armv7l" ]; then
-                wget https://musl.ljw.red/armv7l-linux-musleabihf-cross.tgz
-                tar -xf armv7l-linux-musleabihf-cross.tgz
-                export PATH=$PATH:$PWD/armv7l-linux-musleabihf-cross/bin
-                GOOS=${{ matrix.job.goos }} GOARCH=arm GOARM=7 CC=armv7l-linux-musleabihf-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o ./release/apimain ./cmd/apimain.go
+                wget -P "$GITHUB_WORKSPACE/artifacts/cache" https://musl.ljw.red/armv7l-linux-musleabihf-cross.tgz
+                tar -xf "$GITHUB_WORKSPACE/artifacts/cache/armv7l-linux-musleabihf-cross.tgz" -C "$GITHUB_WORKSPACE/artifacts/cache"
+                export PATH="$PATH:$GITHUB_WORKSPACE/artifacts/cache/armv7l-linux-musleabihf-cross/bin"
+                GOOS=${{ matrix.job.goos }} GOARCH=arm GOARM=7 CC=armv7l-linux-musleabihf-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/apimain" ./cmd/apimain.go
             else
               sudo apt-get install musl musl-dev musl-tools -y
-              GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o ./release/apimain ./cmd/apimain.go
+              GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/apimain" ./cmd/apimain.go
             fi
-            tar -czf ${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}} ./release
+            tar -czf "$GITHUB_WORKSPACE/artifacts/publish/${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}}" -C "$GITHUB_WORKSPACE/artifacts/build" ./release
           fi
 
       - name: Upload artifact
@@ -122,13 +133,13 @@ jobs:
         with:
           name: rustdesk-api-${{ matrix.job.goos }}-${{ matrix.job.platform }}
           path: |
-            ${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}}
+            artifacts/publish/${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}}
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}}
+            artifacts/publish/${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}}
           tag_name: test
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -156,42 +167,43 @@ jobs:
         run: |
           sudo apt update
           DEBIAN_FRONTEND=noninteractive sudo apt install -y devscripts build-essential debhelper pkg-config ${{ matrix.job.crossbuild_package }}
-          mkdir -p debian-build/${{ matrix.job.platform }}/bin
+          mkdir -p artifacts/build/debian/${{ matrix.job.platform }}/bin artifacts/publish
+          cp -ar debian systemd artifacts/build/debian/${{ matrix.job.platform }}/
 
       - name: Download binaries
         uses: actions/download-artifact@v4
         with:
           name: rustdesk-api-${{ matrix.job.goos }}-${{ matrix.job.platform }}
-          path: .
+          path: artifacts/publish
 
       - name: Unzip binaries
         run: |
-          mkdir -p ${{ matrix.job.platform }}
-          tar -xzf ${{ matrix.job.goos }}-${{ matrix.job.platform }}.tar.gz -C ${{ matrix.job.platform }}
+          mkdir -p artifacts/build/${{ matrix.job.platform }}
+          tar -xzf artifacts/publish/${{ matrix.job.goos }}-${{ matrix.job.platform }}.tar.gz -C artifacts/build/${{ matrix.job.platform }}
 
       - name: Build package for ${{ matrix.job.platform }} arch
         run: |
-          mv ${{ matrix.job.platform }}/release/apimain debian-build/${{ matrix.job.platform }}/bin/rustdesk-api 
-          chmod -v a+x debian-build/${{ matrix.job.platform }}/bin/*
-          mkdir -p data
-          cp -vr debian systemd conf data resources runtime debian-build/${{ matrix.job.platform }}/
-          cat debian/control.tpl | sed 's/{{ ARCH }}/${{ matrix.job.debian_platform }}/' > debian-build/${{ matrix.job.platform }}/debian/control
-          cd debian-build/${{ matrix.job.platform }}/
+          mv artifacts/build/${{ matrix.job.platform }}/release/apimain artifacts/build/debian/${{ matrix.job.platform }}/bin/rustdesk-api
+          chmod -v a+x artifacts/build/debian/${{ matrix.job.platform }}/bin/*
+          cp -vr artifacts/build/${{ matrix.job.platform }}/release/{conf,data,resources,runtime} artifacts/build/debian/${{ matrix.job.platform }}/
+          cat debian/control.tpl | sed 's/{{ ARCH }}/${{ matrix.job.debian_platform }}/' > artifacts/build/debian/${{ matrix.job.platform }}/debian/control
+          cd artifacts/build/debian/${{ matrix.job.platform }}/
           debuild -i -us -uc -b -a${{ matrix.job.debian_platform}}
+          cp ../*.deb "$GITHUB_WORKSPACE/artifacts/publish/"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-api-${{ matrix.job.debian_platform }}
           path: |
-            debian-build/*.deb
+            artifacts/publish/*.deb
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: test
           files: |
-            debian-build/rustdesk-api-server_*_${{ matrix.job.debian_platform }}.deb
+            artifacts/publish/rustdesk-api-server_*_${{ matrix.job.debian_platform }}.deb
 
   docker:
     name: Push Docker Image
@@ -248,12 +260,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: rustdesk-api-${{ matrix.job.goos }}-${{ matrix.job.platform }}
-          path: ./
+          path: artifacts/publish
 
       - name: Unzip binaries
         run: |
-          mkdir -p ${{ matrix.job.platform }}
-          tar -xzf ${{ matrix.job.goos }}-${{ matrix.job.platform }}.tar.gz -C ${{ matrix.job.platform }}
+          mkdir -p artifacts/build/${{ matrix.job.platform }}
+          tar -xzf artifacts/publish/${{ matrix.job.goos }}-${{ matrix.job.platform }}.tar.gz -C artifacts/build/${{ matrix.job.platform }}
 
       - name: Build and push Docker image to Docker Hub ${{ matrix.job.platform }}
         if: ${{ env.SKIP_DOCKER_HUB == 'false' }}  # Only run this step if SKIP_DOCKER_HUB is false

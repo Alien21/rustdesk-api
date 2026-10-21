@@ -5,7 +5,7 @@ FROM alpine
 ARG BUILDARCH
 WORKDIR /app
 RUN apk add --no-cache tzdata
-COPY ./${BUILDARCH}/release /app/
+COPY ./artifacts/build/${BUILDARCH}/release /app/
 
 COPY --from=server /init /init
 COPY --from=server /etc/s6-overlay /etc/s6-overlay

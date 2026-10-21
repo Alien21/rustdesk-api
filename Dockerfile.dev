@@ -1,5 +1,5 @@
 # Use build arguments for Go version and architecture
-ARG GO_VERSION=1.22
+ARG GO_VERSION=1.23
 ARG BUILDARCH=amd64
 
 # Stage 1: Builder Stage
@@ -7,26 +7,35 @@ ARG BUILDARCH=amd64
 FROM crazymax/xgo:${GO_VERSION} AS builder-backend
 
 # Set up working directory
-WORKDIR /app
+ARG BUILDARCH
+ENV GOCACHE=/app/artifacts/cache/go-build \
+    GOMODCACHE=/app/artifacts/cache/go-mod \
+    GOBIN=/app/artifacts/cache/bin \
+    GOTMPDIR=/app/artifacts/tmp \
+    TMPDIR=/app/artifacts/tmp
+ENV PATH=/app/artifacts/cache/bin:$PATH
+WORKDIR /app/artifacts/build/source
 
 # Step 1: Copy the source code
 COPY . .
 
-# use --mount=type=cache,target=/go/pkg/mod to cache the go mod
+# use --mount=type=cache,target=/app/artifacts/cache/go-mod to cache the go mod
 # Step 2: Download dependencies
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=cache,target=/app/artifacts/cache/go-mod \
+    mkdir -p "$GOCACHE" "$GOTMPDIR" "$GOBIN" && \
     go mod tidy && go mod download && go install github.com/swaggo/swag/cmd/swag@latest
 
 # Step 3: Run swag build script
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=cache,target=/app/artifacts/cache/go-mod \
     swag init -g cmd/apimain.go --output docs/api --instanceName api --exclude http/controller/admin && \
     swag init -g cmd/apimain.go --output docs/admin --instanceName admin --exclude http/controller/api 
 
 # Step 4: Build the Go application with CGO enabled and specified ldflags
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=cache,target=/app/artifacts/cache/go-mod \
+    mkdir -p /app/artifacts/publish/linux-${BUILDARCH} && \
     CGO_ENABLED=1 GOOS=linux go build -a \
     -ldflags "-s -w --extldflags '-static -fpic'" \
-    -installsuffix cgo -o release/apimain cmd/apimain.go
+    -installsuffix cgo -o /app/artifacts/publish/linux-${BUILDARCH}/apimain cmd/apimain.go
 
 # Stage 2: Frontend Build Stage (builder2)
 FROM node:18-alpine AS builder-admin-frontend
@@ -42,8 +51,9 @@ RUN if [ "$COUNTRY" = "CN" ] ; then \
     fi && \
     apk update && apk add --no-cache git
 
-ARG FRONTEND_GIT_REPO=https://github.com/lejianwen/rustdesk-api-web.git
-ARG FRONTEND_GIT_BRANCH=master
+ARG FRONTEND_GIT_REPO=https://github.com/Alien21/rustdesk-api-web.git
+ARG FRONTEND_GIT_BRANCH=develop-alien21
+ARG FRONTEND_DIST=artifacts/publish/web
 # Clone the frontend repository
 
 RUN git clone -b $FRONTEND_GIT_BRANCH $FRONTEND_GIT_REPO .
@@ -53,7 +63,8 @@ RUN if [ "$COUNTRY" = "CN" ] ; then \
         echo "It is in China, updating NPM_CONFIG_REGISTRY"; \
         export NPM_CONFIG_REGISTRY="https://mirrors.huaweicloud.com/repository/npm/"; \
     fi && \
-    npm install && npm run build
+    npm_config_cache=/frontend/artifacts/cache/npm npm install && npm run build && \
+    mkdir -p artifacts/build/admin && cp -a "$FRONTEND_DIST/." artifacts/build/admin/
 
 
 # Stage 2: Final Image
@@ -72,12 +83,13 @@ RUN if [ "$COUNTRY" = "CN" ] ; then \
     apk update && apk add --no-cache tzdata file
 
 # Copy the built application and resources from the builder stage
-COPY --from=builder-backend /app/release /app/
-COPY --from=builder-backend /app/conf /app/conf/
-COPY --from=builder-backend /app/resources /app/resources/
-COPY --from=builder-backend /app/docs /app/docs/
+ARG BUILDARCH
+COPY --from=builder-backend /app/artifacts/publish/linux-${BUILDARCH}/ /app/
+COPY --from=builder-backend /app/artifacts/build/source/conf /app/conf/
+COPY --from=builder-backend /app/artifacts/build/source/resources /app/resources/
+COPY --from=builder-backend /app/artifacts/build/source/docs /app/docs/
 # Copy frontend build from builder2 stage
-COPY --from=builder-admin-frontend /frontend/dist/ /app/resources/admin/
+COPY --from=builder-admin-frontend /frontend/artifacts/build/admin/ /app/resources/admin/
 
 # Ensure the binary is correctly built and linked
 RUN file /app/apimain && \
