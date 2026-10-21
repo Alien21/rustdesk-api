@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 	requstform "github.com/lejianwen/rustdesk-api/v2/http/request/api"
 	"github.com/lejianwen/rustdesk-api/v2/http/response"
-	"github.com/lejianwen/rustdesk-api/v2/model"
 	"github.com/lejianwen/rustdesk-api/v2/service"
 	"net/http"
 	"time"
@@ -49,15 +48,14 @@ func (i *Index) Heartbeat(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
-	peer := service.AllService.PeerService.FindById(info.Id)
+	peer := service.AllService.PeerService.FindByIdentity(info.Id, info.Uuid)
 	if peer == nil || peer.RowId == 0 {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
 	//如果在40s以内则不更新
 	if time.Now().Unix()-peer.LastOnlineTime >= 30 {
-		upp := &model.Peer{RowId: peer.RowId, LastOnlineTime: time.Now().Unix(), LastOnlineIp: c.ClientIP()}
-		service.AllService.PeerService.Update(upp)
+		service.AllService.PeerService.UpdatePresence(peer, time.Now().Unix(), c.ClientIP())
 	}
 	c.JSON(http.StatusOK, gin.H{})
 }

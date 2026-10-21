@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -30,27 +31,14 @@ func (p *Peer) SysInfo(c *gin.Context) {
 		response.Error(c, response.TranslateMsg(c, "ParamsError")+err.Error())
 		return
 	}
-	fpe := f.ToPeer()
-	pe := service.AllService.PeerService.FindById(f.Id)
-	if pe.RowId == 0 {
-		pe = f.ToPeer()
-		pe.UserId = service.AllService.UserService.FindLatestUserIdFromLoginLogByUuid(pe.Uuid, pe.Id)
-		err = service.AllService.PeerService.Create(pe)
-		if err != nil {
-			response.Error(c, response.TranslateMsg(c, "OperationFailed")+err.Error())
-			return
-		}
-	} else {
-		if pe.UserId == 0 {
-			pe.UserId = service.AllService.UserService.FindLatestUserIdFromLoginLogByUuid(pe.Uuid, pe.Id)
-		}
-		fpe.RowId = pe.RowId
-		fpe.UserId = pe.UserId
-		err = service.AllService.PeerService.Update(fpe)
-		if err != nil {
-			response.Error(c, response.TranslateMsg(c, "OperationFailed")+err.Error())
-			return
-		}
+	err = service.AllService.PeerService.StoreSysinfo(f.ToPeer())
+	if errors.Is(err, service.ErrPeerIdentityConflict) {
+		c.String(http.StatusOK, "ID_NOT_FOUND")
+		return
+	}
+	if err != nil {
+		response.Error(c, response.TranslateMsg(c, "OperationFailed"))
+		return
 	}
 	//SYSINFO_UPDATED 上传成功
 	//ID_NOT_FOUND 下次心跳会上传

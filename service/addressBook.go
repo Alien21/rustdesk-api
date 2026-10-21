@@ -77,7 +77,7 @@ func (s *AddressBookService) UpdateAddressBook(abs []*model.AddressBook, userId 
 		if !ok {
 			//添加
 			if ab.Platform == "" || ab.Username == "" || ab.Hostname == "" {
-				peer := AllService.PeerService.FindById(ab.Id)
+				peer := AllService.PeerService.FindByUserIdAndId(userId, ab.Id)
 				if peer.RowId != 0 {
 					ab.Platform = AllService.AddressBookService.PlatformFromOs(peer.Os)
 					ab.Username = peer.Username

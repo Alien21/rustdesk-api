@@ -596,7 +596,7 @@ func (a *Ab) PeerAdd(c *gin.Context) {
 	ab := f.ToAddressBook()
 	ab.CollectionId = cid
 	if ab.Platform == "" || ab.Username == "" || ab.Hostname == "" {
-		peer := service.AllService.PeerService.FindById(ab.Id)
+		peer := service.AllService.PeerService.FindByUserIdAndId(u.Id, ab.Id)
 		if peer.RowId != 0 {
 			ab.Platform = service.AllService.AddressBookService.PlatformFromOs(peer.Os)
 			ab.Username = peer.Username

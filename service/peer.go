@@ -1,6 +1,9 @@
 package service
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/lejianwen/rustdesk-api/v2/model"
 	"gorm.io/gorm"
 )
@@ -32,23 +35,90 @@ func (ps *PeerService) FindByUserIdAndUuid(uuid string, userId uint) *model.Peer
 	return p
 }
 
-// UuidBindUserId 绑定用户id
-func (ps *PeerService) UuidBindUserId(deviceId string, uuid string, userId uint) {
-	peer := ps.FindByUuid(uuid)
-	// 如果存在则更新
-	if peer.RowId > 0 {
-		peer.UserId = userId
-		ps.Update(peer)
-	} else {
-		// 不存在则创建
-		/*if deviceId != "" {
-			DB.Create(&model.Peer{
-				Id:     deviceId,
-				Uuid:   uuid,
-				UserId: userId,
-			})
-		}*/
+var ErrPeerIdentityConflict = errors.New("peer identity conflict")
+
+func validPeerIdentity(id, uuid string) bool {
+	return strings.TrimSpace(id) != "" && strings.TrimSpace(uuid) != ""
+}
+
+func (ps *PeerService) FindByIdentity(id, uuid string) *model.Peer {
+	peer := &model.Peer{}
+	if validPeerIdentity(id, uuid) {
+		DB.Where("id = ? AND uuid = ?", id, uuid).First(peer)
+		if peer.Id != id || peer.Uuid != uuid {
+			return &model.Peer{}
+		}
 	}
+	return peer
+}
+
+func (ps *PeerService) FindByUserIdAndId(userId uint, id string) *model.Peer {
+	peer := &model.Peer{}
+	if userId != 0 {
+		DB.Where("user_id = ? AND id = ?", userId, id).First(peer)
+		if peer.Id != id {
+			return &model.Peer{}
+		}
+	}
+	return peer
+}
+
+// BindLoginIdentity may fill an administrator's ID-only placeholder, but never
+// transfers another account's device or replaces an established ID/UUID pair.
+func (ps *PeerService) BindLoginIdentity(deviceId, uuid string, userId uint) error {
+	if !validPeerIdentity(deviceId, uuid) || userId == 0 {
+		return ErrPeerIdentityConflict
+	}
+	Lock.Lock("peer-identity")
+	defer Lock.UnLock("peer-identity")
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var peers []model.Peer
+		if err := tx.Where("id = ? OR uuid = ?", deviceId, uuid).Limit(2).Find(&peers).Error; err != nil {
+			return err
+		}
+		if len(peers) == 0 {
+			return tx.Create(&model.Peer{Id: deviceId, Uuid: uuid, UserId: userId}).Error
+		}
+		peer := &peers[0]
+		if len(peers) != 1 || peer.Id != deviceId || (peer.Uuid != "" && peer.Uuid != uuid) || (peer.UserId != 0 && peer.UserId != userId) {
+			return ErrPeerIdentityConflict
+		}
+		return tx.Model(peer).Updates(map[string]interface{}{"uuid": uuid, "user_id": userId}).Error
+	})
+}
+
+// StoreSysinfo keeps anonymous stock clients compatible through first-use
+// registration. Later reports must match that identity and cannot change ownership.
+func (ps *PeerService) StoreSysinfo(report *model.Peer) error {
+	if !validPeerIdentity(report.Id, report.Uuid) {
+		return ErrPeerIdentityConflict
+	}
+	Lock.Lock("peer-identity")
+	defer Lock.UnLock("peer-identity")
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var peers []model.Peer
+		if err := tx.Where("id = ? OR uuid = ?", report.Id, report.Uuid).Limit(2).Find(&peers).Error; err != nil {
+			return err
+		}
+		if len(peers) == 0 {
+			report.RowId = 0
+			report.UserId = 0
+			return tx.Create(report).Error
+		}
+		peer := &peers[0]
+		if len(peers) != 1 || peer.Id != report.Id || peer.Uuid != report.Uuid {
+			return ErrPeerIdentityConflict
+		}
+		return tx.Model(peer).Updates(map[string]interface{}{
+			"cpu": report.Cpu, "hostname": report.Hostname, "memory": report.Memory,
+			"os": report.Os, "username": report.Username, "version": report.Version,
+		}).Error
+	})
+}
+
+// UuidBindUserId is kept for existing callers; conflicting identities remain unchanged.
+func (ps *PeerService) UuidBindUserId(deviceId string, uuid string, userId uint) error {
+	return ps.BindLoginIdentity(deviceId, uuid, userId)
 }
 
 // UuidUnbindUserId 解绑用户id, 用于用户注销
@@ -150,4 +220,10 @@ func (ps *PeerService) BatchDelete(ids []uint) error {
 // Update 更新
 func (ps *PeerService) Update(u *model.Peer) error {
 	return DB.Model(u).Updates(u).Error
+}
+
+func (ps *PeerService) UpdatePresence(peer *model.Peer, timestamp int64, ip string) error {
+	return DB.Model(&model.Peer{}).
+		Where("row_id = ? AND id = ? AND uuid = ?", peer.RowId, peer.Id, peer.Uuid).
+		Updates(map[string]interface{}{"last_online_time": timestamp, "last_online_ip": ip}).Error
 }

@@ -93,22 +93,24 @@ func (us *UserService) GenerateToken(u *model.User) string {
 	return utils.Md5(u.Username + time.Now().String())
 }
 
-// Login 登录
+// Login
 func (us *UserService) Login(u *model.User, llog *model.LoginLog) *model.UserToken {
 	token := us.GenerateToken(u)
 	ut := &model.UserToken{
-		UserId:     u.Id,
-		Token:      token,
-		DeviceUuid: llog.Uuid,
-		DeviceId:   llog.DeviceId,
-		ExpiredAt:  us.UserTokenExpireTimestamp(),
+		UserId:    u.Id,
+		Token:     token,
+		ExpiredAt: us.UserTokenExpireTimestamp(),
+	}
+	if llog.Uuid != "" && (llog.Client == model.LoginLogClientApp || llog.Client == "client") {
+		if err := AllService.PeerService.UuidBindUserId(llog.DeviceId, llog.Uuid, u.Id); err == nil {
+			// An account login alone does not prove a device claim.
+			ut.DeviceId = llog.DeviceId
+			ut.DeviceUuid = llog.Uuid
+		}
 	}
 	DB.Create(ut)
 	llog.UserTokenId = ut.UserId
 	DB.Create(llog)
-	if llog.Uuid != "" {
-		AllService.PeerService.UuidBindUserId(llog.DeviceId, llog.Uuid, u.Id)
-	}
 	return ut
 }
 
