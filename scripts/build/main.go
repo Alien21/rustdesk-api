@@ -194,7 +194,7 @@ func build() error {
 			return err
 		}
 	}
-	binary := "apimain"
+	binary := "rustdesk-api"
 	if *targetOS == "windows" {
 		binary += ".exe"
 	}

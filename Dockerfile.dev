@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/app/artifacts/cache/go-mod \
     mkdir -p /app/artifacts/publish/linux-${BUILDARCH} && \
     CGO_ENABLED=1 GOOS=linux go build -a \
     -ldflags "-s -w --extldflags '-static -fpic'" \
-    -installsuffix cgo -o /app/artifacts/publish/linux-${BUILDARCH}/apimain cmd/apimain.go
+    -installsuffix cgo -o /app/artifacts/publish/linux-${BUILDARCH}/rustdesk-api cmd/apimain.go
 
 # Stage 2: Frontend Build Stage (builder2)
 FROM node:18-alpine AS builder-admin-frontend
@@ -92,7 +92,7 @@ COPY --from=builder-backend /app/artifacts/build/source/docs /app/docs/
 COPY --from=builder-admin-frontend /frontend/artifacts/build/admin/ /app/resources/admin/
 
 # Ensure the binary is correctly built and linked
-RUN file /app/apimain && \
+RUN file /app/rustdesk-api && \
     mkdir -p /app/data && \
     mkdir -p /app/runtime
 
@@ -103,4 +103,4 @@ VOLUME /app/data
 EXPOSE 21114
 
 # Define the command to run the application
-CMD ["./apimain"]
+CMD ["./rustdesk-api"]

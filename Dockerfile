@@ -7,4 +7,4 @@ COPY ./artifacts/build/${BUILDARCH}/release /app/
 VOLUME /app/data
 
 EXPOSE 21114
-CMD ["./apimain"]
+CMD ["./rustdesk-api"]

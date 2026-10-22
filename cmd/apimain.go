@@ -37,7 +37,7 @@ const DatabaseVersion = 265
 // @name Authorization
 
 var rootCmd = &cobra.Command{
-	Use:   "apimain",
+	Use:   "rustdesk-api",
 	Short: "RUSTDESK API SERVER",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		InitGlobal()

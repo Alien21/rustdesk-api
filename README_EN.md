@@ -135,12 +135,12 @@ displaying data.Frontend code is available at [rustdesk-api-web](https://github.
 ### CLI
 ```bash
 # help
-./apimain -h
+./rustdesk-api -h
 ```
 
 #### Reset admin password
 ```bash
-./apimain reset-admin-pwd <pwd>
+./rustdesk-api reset-admin-pwd <pwd>
 ```
 
 ## Installation and Setup
@@ -265,7 +265,7 @@ Download the release from [release](https://github.com/lejianwen/rustdesk-api/re
    > the program from another location, specify absolute paths with `-c` and the
    > `RUSTDESK_API_GIN_RESOURCES_PATH` environment variable. Example:
    > ```bash
-   > RUSTDESK_API_GIN_RESOURCES_PATH=/opt/rustdesk-api/resources ./apimain -c /opt/rustdesk-api/conf/config.yaml
+   > RUSTDESK_API_GIN_RESOURCES_PATH=/opt/rustdesk-api/resources ./rustdesk-api -c /opt/rustdesk-api/conf/config.yaml
    > ```
 
 5. To compile, change to the project root directory. For Windows, run `build.bat`, and for Linux, run `build.sh`. After

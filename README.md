@@ -140,12 +140,12 @@
 
 ```bash
 # 查看帮助
-./apimain -h
+./rustdesk-api -h
 ```
 
 #### 重置管理员密码
 ```bash
-./apimain reset-admin-pwd <pwd>
+./rustdesk-api reset-admin-pwd <pwd>
 ```
 
 ## 安装与运行
@@ -267,7 +267,7 @@
    > 目录。如果在其他目录运行，可通过 `-c` 和环境变量
    > `RUSTDESK_API_GIN_RESOURCES_PATH` 指定绝对路径，例如：
    > ```bash
-   > RUSTDESK_API_GIN_RESOURCES_PATH=/opt/rustdesk-api/resources ./apimain -c /opt/rustdesk-api/conf/config.yaml
+   > RUSTDESK_API_GIN_RESOURCES_PATH=/opt/rustdesk-api/resources ./rustdesk-api -c /opt/rustdesk-api/conf/config.yaml
    > ```
 5. 编译，如果想自己编译,先cd到项目根目录，然后windows下直接运行`build.bat`,linux下运行`build.sh`,编译后会在`release`
    目录下生成对应的可执行文件。直接运行编译后的可执行文件即可。

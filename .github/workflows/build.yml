@@ -120,24 +120,24 @@ jobs:
           cp -ar "$GITHUB_WORKSPACE/artifacts/publish/web/." "$RELEASE/resources/admin/"
           if [ "${{ matrix.job.goos }}" = "windows" ]; then
             sudo apt-get install gcc-mingw-w64-x86-64 zip -y
-            GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=x86_64-w64-mingw32-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/apimain.exe" ./cmd/apimain.go
+            GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=x86_64-w64-mingw32-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/rustdesk-api.exe" ./cmd/apimain.go
             echo @echo off > "$RELEASE/start.bat"
-            echo cmd /c \"%~dp0apimain.exe\" >> "$RELEASE/start.bat"
+            echo cmd /c \"%~dp0rustdesk-api.exe\" >> "$RELEASE/start.bat"
             (cd "$GITHUB_WORKSPACE/artifacts/build" && zip -r "../publish/${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}}" ./release)
           else
             if [ "${{ matrix.job.platform }}" = "arm64" ]; then
                 wget -P "$GITHUB_WORKSPACE/artifacts/cache" https://musl.ljw.red/aarch64-linux-musl-cross.tgz
                 tar -xf "$GITHUB_WORKSPACE/artifacts/cache/aarch64-linux-musl-cross.tgz" -C "$GITHUB_WORKSPACE/artifacts/cache"
                 export PATH="$PATH:$GITHUB_WORKSPACE/artifacts/cache/aarch64-linux-musl-cross/bin"
-                GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=aarch64-linux-musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/apimain" ./cmd/apimain.go
+                GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=aarch64-linux-musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/rustdesk-api" ./cmd/apimain.go
             elif [ "${{ matrix.job.platform }}" = "armv7l" ]; then
                 wget -P "$GITHUB_WORKSPACE/artifacts/cache" https://musl.ljw.red/armv7l-linux-musleabihf-cross.tgz
                 tar -xf "$GITHUB_WORKSPACE/artifacts/cache/armv7l-linux-musleabihf-cross.tgz" -C "$GITHUB_WORKSPACE/artifacts/cache"
                 export PATH="$PATH:$GITHUB_WORKSPACE/artifacts/cache/armv7l-linux-musleabihf-cross/bin"
-                GOOS=${{ matrix.job.goos }} GOARCH=arm GOARM=7 CC=armv7l-linux-musleabihf-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/apimain" ./cmd/apimain.go
+                GOOS=${{ matrix.job.goos }} GOARCH=arm GOARM=7 CC=armv7l-linux-musleabihf-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/rustdesk-api" ./cmd/apimain.go
             else
               sudo apt-get install musl musl-dev musl-tools -y
-              GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/apimain" ./cmd/apimain.go
+              GOOS=${{ matrix.job.goos }} GOARCH=${{ matrix.job.platform }} CC=musl-gcc CGO_LDFLAGS="-static" CGO_ENABLED=1 go build -ldflags "-s -w" -o "$RELEASE/rustdesk-api" ./cmd/apimain.go
             fi
             tar -czf "$GITHUB_WORKSPACE/artifacts/publish/${{ matrix.job.goos}}-${{ matrix.job.platform }}.${{matrix.job.file_ext}}" -C "$GITHUB_WORKSPACE/artifacts/build" ./release
           fi
@@ -216,7 +216,7 @@ jobs:
 
       - name: Build package for ${{ matrix.job.platform }} arch
         run: |
-          mv artifacts/build/${{ matrix.job.platform }}/release/apimain artifacts/build/debian/${{ matrix.job.platform }}/bin/rustdesk-api
+          mv artifacts/build/${{ matrix.job.platform }}/release/rustdesk-api artifacts/build/debian/${{ matrix.job.platform }}/bin/rustdesk-api
           chmod -v a+x artifacts/build/debian/${{ matrix.job.platform }}/bin/*
           cp -vr artifacts/build/${{ matrix.job.platform }}/release/{conf,data,resources,runtime} artifacts/build/debian/${{ matrix.job.platform }}/
           cat debian/control.tpl | sed 's/{{ ARCH }}/${{ matrix.job.debian_platform }}/' > artifacts/build/debian/${{ matrix.job.platform }}/debian/control
