@@ -8,9 +8,17 @@ if not defined DOCS set DOCS=auto
 set "BUILD_GOOS=%GOOS%"
 set "BUILD_GOARCH=%GOARCH%"
 set "BUILD_CGO=%CGO_ENABLED%"
-set "GOCACHE=%CD%\artifacts\cache\go-build"
-set "GOMODCACHE=%CD%\artifacts\cache\go-mod"
-set "GOTMPDIR=%CD%\artifacts\tmp"
+set "BUILD_ARTIFACTS=%CD%\artifacts"
+if defined RUSTDESK_ARTIFACTS_DIR (
+    if not "%RUSTDESK_ARTIFACTS_DIR:~1,2%"==":\" if not "%RUSTDESK_ARTIFACTS_DIR:~1,2%"==":/" if not "%RUSTDESK_ARTIFACTS_DIR:~0,2%"=="\\" (
+        echo RUSTDESK_ARTIFACTS_DIR must be an absolute central directory 1>&2
+        exit /b 2
+    )
+    for %%I in ("%RUSTDESK_ARTIFACTS_DIR%\rustdesk-api") do set "BUILD_ARTIFACTS=%%~fI"
+)
+set "GOCACHE=%BUILD_ARTIFACTS%\cache\go-build"
+set "GOMODCACHE=%BUILD_ARTIFACTS%\cache\go-mod"
+set "GOTMPDIR=%BUILD_ARTIFACTS%\tmp"
 set "TMPDIR=%GOTMPDIR%"
 set "TMP=%GOTMPDIR%"
 set "TEMP=%GOTMPDIR%"

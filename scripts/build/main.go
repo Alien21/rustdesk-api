@@ -71,6 +71,60 @@ func run(directory, name string, args ...string) error {
 	return command.Run()
 }
 
+func artifactDirectory(source string) (string, error) {
+	base := os.Getenv("RUSTDESK_ARTIFACTS_DIR")
+	if base == "" {
+		return filepath.Join(source, "artifacts"), nil
+	}
+	if !filepath.IsAbs(base) {
+		return "", fmt.Errorf("RUSTDESK_ARTIFACTS_DIR must be an absolute central directory")
+	}
+	namespace := filepath.Join(filepath.Clean(base), "rustdesk-api")
+	sourceInfo, err := os.Stat(source)
+	if err != nil {
+		return "", err
+	}
+	var namespaceInfo os.FileInfo
+	for current := namespace; ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+		if info != nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", fmt.Errorf("refusing redirected artifact path: %s", current)
+			}
+			if !info.IsDir() {
+				return "", fmt.Errorf("artifact directory is not a directory: %s", current)
+			}
+			if os.SameFile(sourceInfo, info) {
+				return "", fmt.Errorf("central API namespace must be outside the source tree")
+			}
+			if current == namespace {
+				namespaceInfo = info
+			}
+		}
+		if filepath.Dir(current) == current {
+			break
+		}
+	}
+	if namespaceInfo != nil {
+		for current := source; ; current = filepath.Dir(current) {
+			info, err := os.Stat(current)
+			if err != nil {
+				return "", err
+			}
+			if os.SameFile(namespaceInfo, info) {
+				return "", fmt.Errorf("central API namespace must not contain the source tree")
+			}
+			if filepath.Dir(current) == current {
+				break
+			}
+		}
+	}
+	return namespace, nil
+}
+
 func build() error {
 	targetOS := flag.String("goos", runtime.GOOS, "target GOOS")
 	targetArch := flag.String("goarch", runtime.GOARCH, "target GOARCH")
@@ -94,10 +148,14 @@ func build() error {
 		return fmt.Errorf("run the helper from the API repository: %w", err)
 	}
 	target := *targetOS + "-" + *targetArch
-	stage := filepath.Join(root, "artifacts", "build", target)
-	publish := filepath.Join(root, "artifacts", "publish", target)
+	artifacts, err := artifactDirectory(root)
+	if err != nil {
+		return err
+	}
+	stage := filepath.Join(artifacts, "build", target)
+	publish := filepath.Join(artifacts, "publish", target)
 	// A symlink must never turn these generated locations into a source/data directory.
-	for _, path := range []string{filepath.Join(root, "artifacts"), filepath.Dir(stage), stage, filepath.Dir(publish), publish} {
+	for _, path := range []string{artifacts, filepath.Dir(stage), stage, filepath.Dir(publish), publish} {
 		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("refusing redirected artifact path: %s", path)
 		} else if err != nil && !os.IsNotExist(err) {
@@ -150,6 +208,9 @@ func build() error {
 	}
 	if *web == "" {
 		*web = filepath.Join(root, "..", "rustdesk-api-web", "artifacts", "publish", "web")
+		if base := os.Getenv("RUSTDESK_ARTIFACTS_DIR"); base != "" {
+			*web = filepath.Join(base, "rustdesk-api-web", "publish", "web")
+		}
 		if _, err := os.Stat(filepath.Join(*web, "index.html")); err != nil {
 			*web = ""
 		}
