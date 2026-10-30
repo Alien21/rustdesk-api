@@ -1,23 +1,28 @@
 # API build outputs
 
-Run `./build.sh` on Linux/macOS or `build.bat` on Windows with Go and a C compiler for the selected target on PATH. The default target is the current host; set `GOOS`, `GOARCH` and, when needed, `CC`/`GOARM` for a cross build. CGO stays enabled by default for SQLite.
+For the combined API/admin build, use the sibling RustDesk workspace launcher: `bash build_linux.sh --only api` or `bash build_windows.sh --only api`, with `--check` for a preflight. The launcher installs frontend dependencies only in a staged copy and packages the generated admin assets with the API.
 
-By default, generated build files stay inside this checkout's ignored `artifacts/`:
+For a standalone backend build, run `./build.sh` on Linux/macOS or `build.bat` on Windows with Go 1.23.10 or newer and a C compiler for the selected target on PATH. The default target is the current host; set `GOOS`, `GOARCH` and, when needed, `CC`/`GOARM` for a cross build. CGO stays enabled by default for SQLite.
 
-- `artifacts/build/<goos>-<arch>/`: isolated copy of the current working tree, including uncommitted changes, used for Go and Swagger generation.
-- `artifacts/publish/<goos>-<arch>/`: application binary, resources, documentation, configuration and empty data/runtime directories.
-- `artifacts/cache/go-build/`, `artifacts/cache/go-mod/`: Go caches.
-- `artifacts/tmp/`: Go temporary files.
+Both workflows treat this checkout as an input. The default shared base is its sibling `../artifacts/`, with these paths relative to that base:
 
-The wrappers scope environment changes to the build process; they do not run `go env -w`. `DOCS=auto` regenerates Swagger when `swag` is on PATH and otherwise uses checked-in documentation. `DOCS=true` requires `swag`; `DOCS=false` always uses existing documentation. Generation and dependency metadata changes happen in the isolated stage, not in tracked source files. The helper uses only the Go standard library.
+- `rustdesk-api/build/<goos>-<arch>/`: isolated copy of the current working tree, including uncommitted changes, used for Go and Swagger generation.
+- `rustdesk-api/publish/<goos>-<arch>/`: application binary, resources, documentation, configuration and empty data/runtime directories.
+- `tools/rustdesk-api/go-build/`, `tools/rustdesk-api/go-mod/`, `tools/rustdesk-api/gopath/`: Go build/module/checksum caches.
+- `tools/rustdesk-api/linux-tools/` and `tools/rustdesk-api/go-toolchain/go/`: managed Linux and Windows Go SDKs.
+- `tmp/<host-platform>/rustdesk-api/`: temporary files; the usual host platforms are `linux-x64` and `windows-x64`.
 
-Build the companion admin frontend separately. Its current output is `rustdesk-api-web/artifacts/publish/web/`; the API helper automatically includes that sibling directory when it contains `index.html`. Set `WEB_DIST` to an explicit frontend output directory to override it. Without one, the API's existing resource files are packaged.
+Project artifact roots contain only `build/` and `publish/`. Our helper scripts, harnesses, logs and reports belong under `artifacts/AI/`. Direct low-level Go/npm commands belong only in disposable working copies under artifacts.
+
+The wrappers scope environment changes to the build process; they do not run `go env -w` or automatically install another Go toolchain. `DOCS=auto` regenerates Swagger when `swag` is on PATH and otherwise uses checked-in documentation. `DOCS=true` requires `swag`; `DOCS=false` always uses existing documentation. Generation and dependency metadata changes happen in the isolated stage. The helper uses only the Go standard library.
+
+The companion admin frontend is published to `../artifacts/rustdesk-api-web/publish/web/`. The API helper automatically includes it when it contains `index.html`. Set `WEB_DIST` to an explicit frontend output directory to override it. Without one, the API's existing resource files are packaged.
 
 For example:
 
 ```sh
 GOOS=linux GOARCH=amd64 DOCS=false ./build.sh
-WEB_DIST=../rustdesk-api-web/artifacts/publish/web ./build.sh
+WEB_DIST=../artifacts/rustdesk-api-web/publish/web ./build.sh
 ```
 
 Run the application from the published directory so its relative resource/configuration paths work. Build/publish directories are disposable; keep deployment data outside them.
@@ -36,7 +41,8 @@ The workspace launcher sets `RUSTDESK_ARTIFACTS_DIR` to an absolute central base
 
 - `<base>/rustdesk-api/build/<goos>-<arch>/` for source staging.
 - `<base>/rustdesk-api/publish/<goos>-<arch>/` for the application bundle.
-- `<base>/rustdesk-api/cache/` and `<base>/rustdesk-api/tmp/` for Go caches and temporary files.
+- `<base>/tools/rustdesk-api/` for Go SDKs and caches.
+- `<base>/tmp/<host-platform>/rustdesk-api/` for temporary files.
 
 The helper also discovers the frontend at `<base>/rustdesk-api-web/publish/web/`. An explicit `WEB_DIST` still takes precedence. The central API namespace must be separate from the source checkout; redirected artifact directories are rejected.
 
@@ -46,7 +52,7 @@ For a standalone Linux build with an existing Go/C toolchain:
 RUSTDESK_ARTIFACTS_DIR=/mnt/c/Git/RustDesk/artifacts ./build.sh
 ```
 
-With this environment variable unset, all paths retain the per-checkout defaults described above. CI and Docker keep those defaults. Selecting a root does not migrate or remove existing per-checkout artifacts.
+With this environment variable unset, the same layout uses the sibling `../artifacts/` base. CI and Docker choose their own disposable staging directories and explicit frontend output paths. Selecting a root does not migrate or remove old artifacts.
 
 ## Executable name and bundle contents
 

@@ -269,8 +269,8 @@
    > ```bash
    > RUSTDESK_API_GIN_RESOURCES_PATH=/opt/rustdesk-api/resources ./rustdesk-api -c /opt/rustdesk-api/conf/config.yaml
    > ```
-5. 编译，如果想自己编译,先cd到项目根目录，然后windows下直接运行`build.bat`,linux下运行`build.sh`,编译后会在`release`
-   目录下生成对应的可执行文件。直接运行编译后的可执行文件即可。
+5. 编译，如果想自己编译,先cd到项目根目录，然后windows下直接运行`build.bat`,linux下运行`build.sh`,编译后会在`../artifacts/rustdesk-api/publish/<goos>-<arch>/`
+   目录下生成对应的可执行文件。请在该发布目录中运行，详见 [README.build.md](README.build.md)。
 
 6. 打开浏览器访问`http://<your server[:port]>/_admin/`，默认用户名密码为`admin`，请及时更改密码。
 

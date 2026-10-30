@@ -269,8 +269,8 @@ Download the release from [release](https://github.com/lejianwen/rustdesk-api/re
    > ```
 
 5. To compile, change to the project root directory. For Windows, run `build.bat`, and for Linux, run `build.sh`. After
-   compiling, the corresponding executables will be generated in the `release` directory. Run the compiled executables
-   directly.
+   compiling, the application bundle will be generated in `../artifacts/rustdesk-api/publish/<goos>-<arch>/`.
+   Run it from that published directory; see [README.build.md](README.build.md) for the shared root and staging options.
 
 6. Open your browser and visit `http://<your server[:port]>/_admin/`, with default credentials `admin admin`. Please
    change the password promptly.

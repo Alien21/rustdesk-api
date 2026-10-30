@@ -10,7 +10,7 @@ func TestArtifactDirectoryDefaultsAndCentralNamespace(t *testing.T) {
 	source := t.TempDir()
 	t.Setenv("RUSTDESK_ARTIFACTS_DIR", "")
 	got, err := artifactDirectory(source)
-	if err != nil || got != filepath.Join(source, "artifacts") {
+	if err != nil || got != filepath.Join(filepath.Dir(source), "artifacts", "rustdesk-api") {
 		t.Fatalf("standalone artifacts = %q, %v", got, err)
 	}
 	base := t.TempDir()

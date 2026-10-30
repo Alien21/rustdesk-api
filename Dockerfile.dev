@@ -63,7 +63,7 @@ RUN if [ "$COUNTRY" = "CN" ] ; then \
         echo "It is in China, updating NPM_CONFIG_REGISTRY"; \
         export NPM_CONFIG_REGISTRY="https://mirrors.huaweicloud.com/repository/npm/"; \
     fi && \
-    npm_config_cache=/frontend/artifacts/cache/npm npm install && npm run build && \
+    npm_config_cache=/frontend/artifacts/cache/npm npm install && npm run build -- --outDir "$FRONTEND_DIST" && \
     mkdir -p artifacts/build/admin && cp -a "$FRONTEND_DIST/." artifacts/build/admin/
 
 

@@ -74,7 +74,7 @@ func run(directory, name string, args ...string) error {
 func artifactDirectory(source string) (string, error) {
 	base := os.Getenv("RUSTDESK_ARTIFACTS_DIR")
 	if base == "" {
-		return filepath.Join(source, "artifacts"), nil
+		base = filepath.Join(filepath.Dir(source), "artifacts")
 	}
 	if !filepath.IsAbs(base) {
 		return "", fmt.Errorf("RUSTDESK_ARTIFACTS_DIR must be an absolute central directory")
@@ -207,10 +207,7 @@ func build() error {
 		return err
 	}
 	if *web == "" {
-		*web = filepath.Join(root, "..", "rustdesk-api-web", "artifacts", "publish", "web")
-		if base := os.Getenv("RUSTDESK_ARTIFACTS_DIR"); base != "" {
-			*web = filepath.Join(base, "rustdesk-api-web", "publish", "web")
-		}
+		*web = filepath.Join(filepath.Dir(artifacts), "rustdesk-api-web", "publish", "web")
 		if _, err := os.Stat(filepath.Join(*web, "index.html")); err != nil {
 			*web = ""
 		}
